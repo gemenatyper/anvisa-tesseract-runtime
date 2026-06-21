@@ -26,8 +26,6 @@ if [[ -z "$BREW_PREFIX" ]]; then
   exit 1
 fi
 
-declare -A COPIED_LIBS=()
-
 copy_library_tree() {
   local binary="$1"
   local owner_kind="$2"
@@ -43,7 +41,6 @@ copy_library_tree() {
     if [[ ! -f "$copied_dep" ]]; then
       cp "$dep" "$copied_dep"
       chmod u+w "$copied_dep"
-      COPIED_LIBS["$dep"]=1
       copy_library_tree "$copied_dep" "lib"
     fi
 
