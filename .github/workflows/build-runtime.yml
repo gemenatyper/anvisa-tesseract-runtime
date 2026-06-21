@@ -74,11 +74,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ github.event.inputs.version }}
         run: |
-          gh release delete "v$VERSION" --yes || true
-          git tag -d "v$VERSION" || true
+          gh release delete "v$VERSION" --repo "$GITHUB_REPOSITORY" --yes || true
           gh release create "v$VERSION" \
             artifacts/runtime-arm64/AnvisaTesseractRuntime-macos-arm64.zip \
-            artifacts/runtime-x86_64/AnvisaTesseractRuntime-macos-x86_64.zip \
             manifest.json \
+            --repo "$GITHUB_REPOSITORY" \
             --title "Anvisa Tesseract Runtime v$VERSION" \
             --notes "Runtime packages for Anvisa OCR."
