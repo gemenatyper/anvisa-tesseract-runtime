@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "packages": [
+    {
+      "architecture": "arm64",
+      "url": "https://github.com/gemenatyper/anvisa-tesseract-runtime/releases/download/v1.0.0/AnvisaTesseractRuntime-macos-arm64.zip",
+      "sha256": "",
+      "byteCount": 0
+    },
+    {
+      "architecture": "x86_64",
+      "url": "https://github.com/gemenatyper/anvisa-tesseract-runtime/releases/download/v1.0.0/AnvisaTesseractRuntime-macos-x86_64.zip",
+      "sha256": "",
+      "byteCount": 0
+    }
+  ]
+}
