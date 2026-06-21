@@ -20,6 +20,50 @@ mkdir -p "$PACKAGE_ROOT/bin" "$PACKAGE_ROOT/lib" "$PACKAGE_ROOT/licenses"
 cp "$TESSERACT_BIN" "$PACKAGE_ROOT/bin/tesseract"
 chmod +x "$PACKAGE_ROOT/bin/tesseract"
 
+BREW_PREFIX="$(brew --prefix 2>/dev/null || true)"
+if [[ -z "$BREW_PREFIX" ]]; then
+  echo "Homebrew-prefix kunde inte hittas." >&2
+  exit 1
+fi
+
+declare -A COPIED_LIBS=()
+
+copy_library_tree() {
+  local binary="$1"
+  local owner_kind="$2"
+  local deps
+  deps="$(otool -L "$binary" | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/" || true)"
+
+  while IFS= read -r dep; do
+    [[ -z "$dep" ]] && continue
+    local dep_name
+    dep_name="$(basename "$dep")"
+    local copied_dep="$PACKAGE_ROOT/lib/$dep_name"
+
+    if [[ ! -f "$copied_dep" ]]; then
+      cp "$dep" "$copied_dep"
+      chmod u+w "$copied_dep"
+      COPIED_LIBS["$dep"]=1
+      copy_library_tree "$copied_dep" "lib"
+    fi
+
+    if [[ "$owner_kind" == "bin" ]]; then
+      install_name_tool -change "$dep" "@executable_path/../lib/$dep_name" "$binary" || true
+    else
+      install_name_tool -change "$dep" "@loader_path/$dep_name" "$binary" || true
+    fi
+  done <<< "$deps"
+}
+
+copy_library_tree "$PACKAGE_ROOT/bin/tesseract" "bin"
+
+for lib in "$PACKAGE_ROOT"/lib/*; do
+  [[ -f "$lib" ]] || continue
+  chmod u+w "$lib"
+  install_name_tool -id "@rpath/$(basename "$lib")" "$lib" || true
+  copy_library_tree "$lib" "lib"
+done
+
 cat > "$PACKAGE_ROOT/README.txt" <<EOF
 Anvisa Tesseract Runtime $VERSION ($ARCH)
 
@@ -29,16 +73,16 @@ Språkmodeller (.traineddata) laddas ner separat av Anvisa.
 EOF
 
 cat > "$PACKAGE_ROOT/licenses/NOTICE.txt" <<EOF
-TODO: Lägg in licenstexter för Tesseract, Leptonica och övriga bundlade beroenden.
-Tesseract: Apache License 2.0.
-EOF
+This package bundles Tesseract OCR and runtime libraries from Homebrew for use by Anvisa.
 
-echo "OBS: Detta script kopierar just nu bara tesseract-binären."
-echo "Nästa steg är att samla dylib-beroenden med otool och justera install names med install_name_tool."
+Tesseract OCR is licensed under Apache License 2.0.
+Bundled dependencies may use their own open source licenses. Review the corresponding
+Homebrew formulae and upstream projects before publishing a production release.
+EOF
 
 (
   cd "$BUILD_DIR"
-  /usr/bin/ditto -c -k --keepParent "AnvisaTesseractRuntime-macos-$ARCH" "$ZIP_PATH"
+  /usr/bin/ditto -c -k "AnvisaTesseractRuntime-macos-$ARCH" "$ZIP_PATH"
 )
 
 SHA256="$(/usr/bin/shasum -a 256 "$ZIP_PATH" | awk '{print $1}')"

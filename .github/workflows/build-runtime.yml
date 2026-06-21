@@ -1,0 +1,86 @@
+name: Build runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Runtime version without v-prefix
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x86_64
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tesseract
+        run: brew install tesseract
+
+      - name: Package runtime
+        run: scripts/package-local-runtime.sh "${{ github.event.inputs.version }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-${{ matrix.arch }}
+          path: |
+            build/AnvisaTesseractRuntime-macos-${{ matrix.arch }}.zip
+            build/manifest.${{ matrix.arch }}.json
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Merge manifests
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import os
+
+          version = os.environ["VERSION"]
+          packages = []
+          for path in sorted(pathlib.Path("artifacts").glob("*/manifest.*.json")):
+              data = json.loads(path.read_text())
+              packages.extend(data["packages"])
+
+          manifest = {
+              "version": version,
+              "packages": packages,
+          }
+          pathlib.Path("manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+          PY
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          gh release delete "v$VERSION" --yes || true
+          git tag -d "v$VERSION" || true
+          gh release create "v$VERSION" \
+            artifacts/runtime-arm64/AnvisaTesseractRuntime-macos-arm64.zip \
+            artifacts/runtime-x86_64/AnvisaTesseractRuntime-macos-x86_64.zip \
+            manifest.json \
+            --title "Anvisa Tesseract Runtime v$VERSION" \
+            --notes "Runtime packages for Anvisa OCR."
